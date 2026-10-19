@@ -2,7 +2,7 @@
  * RSVP receiver for the Muhammad & Leila invitation.
  * Bound to the Google Sheet with ID below.
  */
-const SPREADSHEET_ID = '1QN9u03BGk2lvJqcdE7QX-QxU_mPFQlJW3KVbx7A5GBQ';
+const SPREADSHEET_ID = '1Mo1LZz8VTGCnqC4Aio6eFX8gsPZg3yp6m1VhoDmKkjA';
 const SHEET_NAME = 'RSVP';
 
 function doPost(e) {
