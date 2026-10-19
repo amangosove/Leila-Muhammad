@@ -1,16 +1,14 @@
 /**
- * Google Sheets RSVP receiver for the Muhammad & Leila invitation.
- * Bind this script to the target Google Sheet (Extensions > Apps Script).
+ * RSVP receiver for the Muhammad & Leila invitation.
+ * Bound to the Google Sheet with ID below.
  */
+const SPREADSHEET_ID = '1QN9u03BGk2lvJqcdE7QX-QxU_mPFQlJW3KVbx7A5GBQ';
 const SHEET_NAME = 'RSVP';
-// Optional: paste Telegram bot token and chat ID to receive every RSVP.
-const TELEGRAM_BOT_TOKEN = '';
-const TELEGRAM_CHAT_ID = '';
 
 function doPost(e) {
   try {
     const data = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     let sheet = ss.getSheetByName(SHEET_NAME);
     if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
     if (sheet.getLastRow() === 0) {
@@ -22,7 +20,35 @@ function doPost(e) {
     const submitted = data.submittedAt ? new Date(data.submittedAt) : new Date();
     sheet.appendRow([submitted, clean_(data.guestName), attendance, Number(data.adults || 0), Number(data.children || 0), Number(data.totalGuests || 0), clean_(data.note), clean_(data.language), clean_(data.event)]);
     sheet.getRange(sheet.getLastRow(), 1).setNumberFormat('yyyy-mm-dd hh:mm:ss');
-    if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) sendTelegram_(data, attendance);
+
+    // Email notification to the Google account that owns/deploys this script.
+    // If mail delivery fails, keep the RSVP row and log the error.
+    try {
+      const ownerEmail = Session.getEffectiveUser().getEmail();
+      if (ownerEmail) {
+        const subject = 'Новый ответ на приглашение — Мухаммад и Лейла';
+        const body = [
+          'Получен новый ответ на приглашение.',
+          '',
+          'Имя: ' + clean_(data.guestName),
+          'Ответ: ' + attendance,
+          'Взрослые: ' + Number(data.adults || 0),
+          'Дети: ' + Number(data.children || 0),
+          'Всего гостей: ' + Number(data.totalGuests || 0),
+          data.note ? 'Комментарий: ' + clean_(data.note) : '',
+          'Язык формы: ' + clean_(data.language),
+          'Мероприятие: ' + clean_(data.event),
+          '',
+          'Таблица ответов: https://docs.google.com/spreadsheets/d/' + SPREADSHEET_ID + '/edit'
+        ].filter(Boolean).join('\\n');
+        MailApp.sendEmail(ownerEmail, subject, body);
+      } else {
+        console.warn('Could not resolve the deploying Google account email.');
+      }
+    } catch (mailErr) {
+      console.error('RSVP was saved, but email notification failed: ' + mailErr);
+    }
+
     return ContentService.createTextOutput(JSON.stringify({ok:true})).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     console.error(err);
@@ -31,29 +57,11 @@ function doPost(e) {
 }
 
 function clean_(value) {
-  // Prevent spreadsheet formula injection from guest-provided text.
   const s = String(value == null ? '' : value).slice(0, 1000);
-  return /^[=+@\-]/.test(s) ? "'" + s : s;
+  return /^[=+@\\-]/.test(s) ? "'" + s : s;
 }
 
-function sendTelegram_(data, attendance) {
-  const text = [
-    '🔔 Новый ответ на приглашение',
-    'Имя: ' + clean_(data.guestName),
-    'Ответ: ' + attendance,
-    'Взрослые: ' + Number(data.adults || 0),
-    'Дети: ' + Number(data.children || 0),
-    'Всего гостей: ' + Number(data.totalGuests || 0),
-    data.note ? 'Комментарий: ' + clean_(data.note) : '',
-    'Язык формы: ' + clean_(data.language)
-  ].filter(Boolean).join('\n');
-  const url = 'https://api.telegram.org/bot' + TELEGRAM_BOT_TOKEN + '/sendMessage';
-  UrlFetchApp.fetch(url, {method:'post', contentType:'application/json', payload:JSON.stringify({chat_id:TELEGRAM_CHAT_ID, text:text}), muteHttpExceptions:true});
-}
-
-// Run once from the Apps Script editor to confirm the sheet is accessible.
 function testSetup() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss) throw new Error('Open Apps Script from inside the target Google Sheet.');
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   Logger.log('Connected to: ' + ss.getName());
 }
